@@ -1,0 +1,5 @@
+{
+  "intelephense.environment.includePaths": [
+    "../../plugins/advanced-custom-fields"
+  ]
+}
