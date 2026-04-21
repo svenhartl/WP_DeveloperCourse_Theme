@@ -1,2 +1,5 @@
 # Local dependencies
 node_modules/
+
+# Local editor artifacts
+debug.log
