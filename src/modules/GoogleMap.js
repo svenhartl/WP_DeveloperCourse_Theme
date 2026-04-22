@@ -1,5 +1,9 @@
 class GMap {
   constructor() {
+    if (typeof google === "undefined" || !google.maps) {
+      return
+    }
+
     document.querySelectorAll(".acf-map").forEach(el => {
       this.new_map(el)
     })
@@ -7,6 +11,10 @@ class GMap {
 
   new_map($el) {
     var $markers = $el.querySelectorAll(".marker")
+
+    if (!$markers.length) {
+      return
+    }
 
     var args = {
       zoom: 16,
@@ -52,6 +60,10 @@ class GMap {
   } // end add_marker
 
   center_map(map) {
+    if (!map.markers.length) {
+      return
+    }
+
     var bounds = new google.maps.LatLngBounds()
 
     // loop through all markers and create bounds
