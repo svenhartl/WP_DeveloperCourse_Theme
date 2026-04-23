@@ -112,7 +112,8 @@ function university_files() {
   wp_enqueue_script('googleMap', '//maps.googleapis.com/maps/api/js?key=AIzaSyDin3iGCdZ7RPomFLyb2yqFERhs55dmfTI', NULL, '1.0', true);
   wp_enqueue_script('main-university-js', get_theme_file_uri('/build/index.js'), array('jquery'), '1.0', true);
   wp_localize_script('main-university-js', 'universityData', array(
-    'root_url' => get_site_url()
+    'root_url' => get_site_url(),
+    'nonce' => wp_create_nonce('wp_rest')
   ));
   wp_enqueue_style('custom-google-fonts', '//fonts.googleapis.com/css?family=Roboto+Condensed:300,300i,400,400i,700,700i|Roboto:100,300,400,400i,700,700i');
   wp_enqueue_style('font-awesome', '//maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css');
@@ -135,6 +136,10 @@ add_action('after_setup_theme', 'university_features');
 function university_adjust_queries($query) {
   if (!is_admin() AND is_post_type_archive('campus') AND $query->is_main_query()) {
     $query->set('posts_per_page', -1);
+  }
+
+  if (!is_admin() AND is_search() AND $query->is_main_query()) {
+    $query->set('post_type', university_searchable_post_types());
   }
 
   if (!is_admin() AND is_post_type_archive('program') AND $query->is_main_query()) {
@@ -205,12 +210,51 @@ function university_get_search_result_author_name($postId) {
   return get_the_author_meta('display_name', $authorId);
 }
 
+function university_get_search_result_image_url($postId) {
+  if ('professor' !== get_post_type($postId)) {
+    return '';
+  }
+
+  $imageUrl = get_the_post_thumbnail_url($postId, 'professorLandscape');
+
+  return $imageUrl ? $imageUrl : '';
+}
+
+function university_get_search_result_event_data($postId) {
+  if ('event' !== get_post_type($postId)) {
+    return array(
+      'eventMonth' => '',
+      'eventDay' => '',
+      'description' => ''
+    );
+  }
+
+  $eventDateValue = get_field('event_date', $postId);
+  $eventDate = $eventDateValue ? DateTime::createFromFormat('Ymd', $eventDateValue) : false;
+
+  if (!$eventDate) {
+    $eventDate = new DateTime(get_the_date('Y-m-d', $postId));
+  }
+
+  $description = has_excerpt($postId) ? get_the_excerpt($postId) : wp_trim_words(get_post_field('post_content', $postId), 18);
+
+  return array(
+    'eventMonth' => $eventDate ? $eventDate->format('M') : '',
+    'eventDay' => $eventDate ? $eventDate->format('d') : '',
+    'description' => $description ? $description : ''
+  );
+}
+
 function university_add_unique_search_result(&$results, &$seenUrls, $result) {
   $result = wp_parse_args($result, array(
     'title' => '',
     'url' => '',
     'type' => '',
-    'authorName' => ''
+    'authorName' => '',
+    'imageUrl' => '',
+    'eventMonth' => '',
+    'eventDay' => '',
+    'description' => ''
   ));
 
   if (empty($result['url'])) {
@@ -225,6 +269,55 @@ function university_add_unique_search_result(&$results, &$seenUrls, $result) {
 
   $seenUrls[$normalizedUrl] = true;
   $results[] = $result;
+}
+
+function university_get_default_search_result_groups() {
+  return array(
+    'generalInfo' => array(),
+    'programs' => array(),
+    'professors' => array(),
+    'campuses' => array(),
+    'events' => array()
+  );
+}
+
+function university_get_search_result_group_name($result) {
+  $resultType = strtolower(isset($result['type']) ? (string) $result['type'] : '');
+  $resultTitle = strtolower(isset($result['title']) ? (string) $result['title'] : '');
+
+  if ('program' === $resultType || ('archive' === $resultType && false !== strpos($resultTitle, 'program'))) {
+    return 'programs';
+  }
+
+  if ('professor' === $resultType || ('archive' === $resultType && false !== strpos($resultTitle, 'professor'))) {
+    return 'professors';
+  }
+
+  if ('campus' === $resultType || ('archive' === $resultType && false !== strpos($resultTitle, 'campus'))) {
+    return 'campuses';
+  }
+
+  if ('event' === $resultType || ('archive' === $resultType && false !== strpos($resultTitle, 'event'))) {
+    return 'events';
+  }
+
+  return 'generalInfo';
+}
+
+function university_group_search_results($results) {
+  $groups = university_get_default_search_result_groups();
+
+  foreach ((array) $results as $result) {
+    $groupName = university_get_search_result_group_name($result);
+
+    if (!isset($groups[$groupName])) {
+      $groupName = 'generalInfo';
+    }
+
+    $groups[$groupName][] = $result;
+  }
+
+  return $groups;
 }
 
 function university_archive_search_targets($searchTerm) {
@@ -325,7 +418,11 @@ function university_get_related_program_search_results($programIds) {
       'title' => get_the_title(),
       'url' => get_permalink(),
       'type' => get_post_type(),
-      'authorName' => university_get_search_result_author_name(get_the_ID())
+      'authorName' => university_get_search_result_author_name(get_the_ID()),
+      'imageUrl' => university_get_search_result_image_url(get_the_ID()),
+      'eventMonth' => '',
+      'eventDay' => '',
+      'description' => ''
     );
   }
 
@@ -353,11 +450,84 @@ function university_get_related_program_search_results($programIds) {
   while ($relatedEvents->have_posts()) {
     $relatedEvents->the_post();
 
-    $results[] = array(
+    $results[] = array_merge(array(
       'title' => get_the_title(),
       'url' => get_permalink(),
       'type' => get_post_type(),
       'authorName' => university_get_search_result_author_name(get_the_ID())
+    ), university_get_search_result_event_data(get_the_ID()));
+  }
+
+  wp_reset_postdata();
+
+  foreach ($programIds as $programId) {
+    $relatedCampuses = get_field('related_campus', $programId);
+
+    if (!$relatedCampuses) {
+      continue;
+    }
+
+    foreach ($relatedCampuses as $campus) {
+      $campusId = $campus instanceof WP_Post ? $campus->ID : (is_object($campus) && isset($campus->ID) ? (int) $campus->ID : (int) $campus);
+
+      if (!$campusId) {
+        continue;
+      }
+
+      $results[] = array(
+        'title' => get_the_title($campusId),
+        'url' => get_permalink($campusId),
+        'type' => get_post_type($campusId),
+        'authorName' => university_get_search_result_author_name($campusId),
+        'imageUrl' => university_get_search_result_image_url($campusId),
+        'eventMonth' => '',
+        'eventDay' => '',
+        'description' => ''
+      );
+    }
+  }
+
+  return $results;
+}
+
+function university_get_related_campus_search_results($campusIds) {
+  $campusIds = array_values(array_filter(array_map('absint', (array) $campusIds)));
+
+  if (empty($campusIds)) {
+    return array();
+  }
+
+  $metaQuery = array('relation' => 'OR');
+
+  foreach ($campusIds as $campusId) {
+    $metaQuery[] = array(
+      'key' => 'related_campus',
+      'compare' => 'LIKE',
+      'value' => '"' . $campusId . '"'
+    );
+  }
+
+  $results = array();
+  $relatedPrograms = new WP_Query(array(
+    'posts_per_page' => -1,
+    'post_type' => 'program',
+    'orderby' => 'title',
+    'order' => 'ASC',
+    'meta_query' => $metaQuery
+  ));
+
+  while ($relatedPrograms->have_posts()) {
+    $relatedPrograms->the_post();
+
+    $results[] = array(
+      'title' => get_the_title(),
+      'url' => get_permalink(),
+      'type' => get_post_type(),
+      'authorName' => university_get_search_result_author_name(get_the_ID()),
+      'imageUrl' => university_get_search_result_image_url(get_the_ID()),
+      'eventMonth' => '',
+      'eventDay' => '',
+      'description' => ''
     );
   }
 
@@ -366,8 +536,8 @@ function university_get_related_program_search_results($programIds) {
   return $results;
 }
 
-function university_search_results($request) {
-  $searchTerm = sanitize_text_field($request->get_param('term'));
+function university_get_search_results($searchTerm) {
+  $searchTerm = sanitize_text_field($searchTerm);
 
   if ('' === $searchTerm) {
     return array();
@@ -376,6 +546,7 @@ function university_search_results($request) {
   $results = array();
   $seenUrls = array();
   $matchingProgramIds = array();
+  $matchingCampusIds = array();
   $contentQuery = new WP_Query(array(
     'post_type' => university_searchable_post_types(),
     'post_status' => 'publish',
@@ -386,15 +557,20 @@ function university_search_results($request) {
   while ($contentQuery->have_posts()) {
     $contentQuery->the_post();
 
-    university_add_unique_search_result($results, $seenUrls, array(
+    university_add_unique_search_result($results, $seenUrls, array_merge(array(
       'title' => get_the_title(),
       'url' => get_permalink(),
       'type' => get_post_type(),
-      'authorName' => university_get_search_result_author_name(get_the_ID())
-    ));
+      'authorName' => university_get_search_result_author_name(get_the_ID()),
+      'imageUrl' => university_get_search_result_image_url(get_the_ID())
+    ), university_get_search_result_event_data(get_the_ID())));
 
     if ('program' === get_post_type()) {
       $matchingProgramIds[] = get_the_ID();
+    }
+
+    if ('campus' === get_post_type()) {
+      $matchingCampusIds[] = get_the_ID();
     }
   }
 
@@ -434,6 +610,10 @@ function university_search_results($request) {
     university_add_unique_search_result($results, $seenUrls, $relatedResult);
   }
 
+  foreach (university_get_related_campus_search_results($matchingCampusIds) as $relatedResult) {
+    university_add_unique_search_result($results, $seenUrls, $relatedResult);
+  }
+
   foreach (university_archive_search_targets($searchTerm) as $target) {
     university_add_unique_search_result($results, $seenUrls, $target);
   }
@@ -441,9 +621,74 @@ function university_search_results($request) {
   return array_values($results);
 }
 
+function university_search_results($request) {
+  return university_get_search_results($request->get_param('term'));
+}
+
 function universityMapKey($api) {
   $api['key'] = 'yourKeyGoesHere';
   return $api;
 }
 
-add_filter('acf/fields/google_map/api', 'universityMapKey');
+// redirect subscriber acc to homepage
+
+add_action('admin_init','redirectSubsToFrontend');
+
+function redirectSubsToFrontend(){
+  $ourCurrentUser= wp_get_current_user();
+
+  if(count($ourCurrentUser->roles)==1 AND $ourCurrentUser->roles[0]=='subscriber'){
+  wp_redirect(site_url('/'));
+  exit;
+  }
+}
+
+
+add_action('wp_loaded','noSubsAdminBar');
+
+function noSubsAdminBar(){
+  $ourCurrentUser= wp_get_current_user();
+
+  if(count($ourCurrentUser->roles)==1 AND $ourCurrentUser->roles[0]=='subscriber'){
+  show_admin_bar(false);
+  }
+}
+
+// customize login screen
+
+add_filter('login_headerurl','ourHeaderUrl');
+
+function ourHeaderUrl(){
+
+return esc_url(site_url('/'));
+} 
+
+add_action('login_enqueue_scripts','ourLoginCss');
+
+function ourLoginCss(){
+
+  wp_enqueue_style('custom-google-fonts', '//fonts.googleapis.com/css?family=Roboto+Condensed:300,300i,400,400i,700,700i|Roboto:100,300,400,400i,700,700i');
+  wp_enqueue_style('font-awesome', '//maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css');
+  wp_enqueue_style('university_main_styles', get_theme_file_uri('/build/style-index.css'));
+  wp_enqueue_style('university_extra_styles', get_theme_file_uri('/build/index.css'));
+
+}
+
+add_filter('login_headertitle','ourLoginTitle');
+
+function ourLoginTitle(){
+
+return get_bloginfo('name');
+
+}
+
+// auto check remember me on login 
+
+add_action( 'login_footer', 'auto_check_remember_me' );
+function auto_check_remember_me() {
+    echo "<script>document.getElementById('rememberme').checked = true;</script>";
+}
+
+// ne radi djubre (google zidovi)
+
+//add_filter('acf/fields/google_map/api', 'universityMapKey');

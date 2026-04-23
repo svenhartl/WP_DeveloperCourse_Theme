@@ -1,5 +1,8 @@
 /*
  Theme Name: Fictional University
- Author: Brad
+ Author: Sven
  Version: 1.0
 */
+.theme-image {
+  background-image: url('../src/images/Dark-Magician.jpg');
+}

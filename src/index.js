@@ -1,6 +1,7 @@
 import "../css/style.scss"
 
 // Our modules / classes
+import MyNotes from "./modules/MyNotes"
 import Search from "./modules/Search"
 import MobileMenu from "./modules/MobileMenu"
 import HeroSlider from "./modules/HeroSlider"
@@ -13,3 +14,4 @@ const mobileMenu = new MobileMenu()
 const heroSlider = new HeroSlider()
 const googleMap = new GoogleMap()
 const leafletMap = new LeafletMap()
+const myNotes = new MyNotes()

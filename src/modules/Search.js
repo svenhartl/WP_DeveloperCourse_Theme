@@ -159,6 +159,70 @@ class Search {
     `
   }
 
+  createProfessorResults(results, emptyMessage = "") {
+    if (!results.length) {
+      return emptyMessage ? `<p class="search-overlay__section-message">${emptyMessage}</p>` : ""
+    }
+
+    const cardResults = results.filter(result => result.imageUrl)
+    const fallbackResults = results.filter(result => !result.imageUrl)
+
+    return `
+      ${cardResults.length ? `
+        <ul class="professor-cards">
+          ${cardResults
+            .map(
+              result => `
+                <li class="professor-card__list-item">
+                  <a class="professor-card" href="${this.escapeHtml(result.url)}">
+                    <img
+                      class="professor-card__image"
+                      src="${this.escapeHtml(result.imageUrl)}"
+                      alt="${this.escapeHtml(result.title)}"
+                    >
+                    <span class="professor-card__name">${this.escapeHtml(result.title)}</span>
+                  </a>
+                </li>
+              `
+            )
+            .join("")}
+        </ul>
+      ` : ""}
+      ${fallbackResults.length ? this.createResultList(fallbackResults) : ""}
+    `
+  }
+
+  createEventResults(results, emptyMessage = "") {
+    if (!results.length) {
+      return emptyMessage ? `<p class="search-overlay__section-message">${emptyMessage}</p>` : ""
+    }
+
+    const cardResults = results.filter(result => result.eventMonth && result.eventDay)
+    const fallbackResults = results.filter(result => !result.eventMonth || !result.eventDay)
+
+    return `
+      ${cardResults
+        .map(
+          result => `
+            <div class="event-summary">
+              <a class="event-summary__date t-center" href="${this.escapeHtml(result.url)}">
+                <span class="event-summary__month">${this.escapeHtml(result.eventMonth)}</span>
+                <span class="event-summary__day">${this.escapeHtml(result.eventDay)}</span>
+              </a>
+              <div class="event-summary__content">
+                <h5 class="event-summary__title headline headline--tiny">
+                  <a href="${this.escapeHtml(result.url)}">${this.escapeHtml(result.title)}</a>
+                </h5>
+                <p>${result.description ? `${this.escapeHtml(result.description)} ` : ""}<a href="${this.escapeHtml(result.url)}" class="nu gray">Learn more</a></p>
+              </div>
+            </div>
+          `
+        )
+        .join("")}
+      ${fallbackResults.length ? this.createResultList(fallbackResults) : ""}
+    `
+  }
+
   createEmptySectionMessage(title) {
     const normalizedTitle = String(title || "").toLowerCase()
 
@@ -180,6 +244,28 @@ class Search {
     `
   }
 
+  createProfessorSectionHtml(title, results, emptyMessage = "") {
+    const fallbackMessage = emptyMessage || this.createEmptySectionMessage(title)
+
+    return `
+      <div class="search-overlay__section">
+        <h2 class="search-overlay__section-title">${title}</h2>
+        ${this.createProfessorResults(results, fallbackMessage)}
+      </div>
+    `
+  }
+
+  createEventSectionHtml(title, results, emptyMessage = "") {
+    const fallbackMessage = emptyMessage || this.createEmptySectionMessage(title)
+
+    return `
+      <div class="search-overlay__section">
+        <h2 class="search-overlay__section-title">${title}</h2>
+        ${this.createEventResults(results, fallbackMessage)}
+      </div>
+    `
+  }
+
   createResultsHtml(results) {
     const normalizedResults = Array.isArray(results) ? results : []
     const groupedResults = this.groupResults(normalizedResults)
@@ -191,11 +277,11 @@ class Search {
         </div>
         <div class="one-third search-overlay__column">
           ${this.createSectionHtml("Programs", groupedResults.programs)}
-          ${this.createSectionHtml("Professors", groupedResults.professors)}
+          ${this.createProfessorSectionHtml("Professors", groupedResults.professors)}
         </div>
         <div class="one-third search-overlay__column">
           ${this.createSectionHtml("Campuses", groupedResults.campuses)}
-          ${this.createSectionHtml("Events", groupedResults.events)}
+          ${this.createEventSectionHtml("Events", groupedResults.events)}
         </div>
       </div>
     `
