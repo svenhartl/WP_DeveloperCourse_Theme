@@ -1,5 +1,5 @@
 <?php
-
+require get_theme_file_path('/inc/like-route.php');
 if (!function_exists('university_resolve_field_post_id')) {
   function university_resolve_field_post_id($post_id = false) {
     if ($post_id instanceof WP_Post) {
@@ -109,8 +109,14 @@ function pageBanner($args = NULL) {
 <?php }
 
 function university_files() {
+  $mainScriptAssetPath = get_theme_file_path('/build/index.asset.php');
+  $mainScriptAsset = file_exists($mainScriptAssetPath) ? require $mainScriptAssetPath : array(
+    'dependencies' => array('jquery'),
+    'version' => filemtime(get_theme_file_path('/build/index.js'))
+  );
+
   wp_enqueue_script('googleMap', '//maps.googleapis.com/maps/api/js?key=AIzaSyDin3iGCdZ7RPomFLyb2yqFERhs55dmfTI', NULL, '1.0', true);
-  wp_enqueue_script('main-university-js', get_theme_file_uri('/build/index.js'), array('jquery'), '1.0', true);
+  wp_enqueue_script('main-university-js', get_theme_file_uri('/build/index.js'), $mainScriptAsset['dependencies'], $mainScriptAsset['version'], true);
   wp_localize_script('main-university-js', 'universityData', array(
     'root_url' => get_site_url(),
     'nonce' => wp_create_nonce('wp_rest')
@@ -687,6 +693,59 @@ return get_bloginfo('name');
 add_action( 'login_footer', 'auto_check_remember_me' );
 function auto_check_remember_me() {
     echo "<script>document.getElementById('rememberme').checked = true;</script>";
+}
+
+// Force note posts to be private
+
+add_filter('wp_insert_post_data','makeNotePrivate',10,2);
+
+function makeNotePrivate($data,$postarr){
+
+  // Limiting user posts and making notes private 
+
+  if(count_user_posts(get_current_user_id(),'note') > 4 AND !$postarr['ID']){
+  die("You have reached your note limit.");
+  }
+
+  if($data['post_type']=='note'){
+
+    $data['post_content']=sanitize_textarea_field($data['post_content']);
+    $data['post_title']=sanitize_text_field($data['post_title']);
+
+  }
+
+  if($data['post_type'] == 'note' AND $data['post_status'] != 'trash'){
+
+  $data['post_status'] = "private";
+
+  }
+return $data;
+}
+
+// remove "Private: " from titles 
+// Use a regex to allow 'Private: ' in title if user manually entered it.
+
+add_filter('the_title', 'remove_private_prefix');
+
+function remove_private_prefix($title) {
+
+  if (get_post_status() == 'private') {
+    $regTitle = preg_replace('/^Private: /', '', $title);
+    return $regTitle;
+  } else {
+    return $title;
+  }
+}
+
+// custom rest fields
+
+add_action('rest_api_init','custom_rest');
+
+function custom_rest(){
+
+register_rest_field('note','userNoteCount',array(
+'get_callback' => function(){return count_user_posts(get_current_user_id(),'note');}
+));
 }
 
 // ne radi djubre (google zidovi)

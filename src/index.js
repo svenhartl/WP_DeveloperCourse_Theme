@@ -1,6 +1,7 @@
 import "../css/style.scss"
 
 // Our modules / classes
+import Like from "./modules/Like"
 import MyNotes from "./modules/MyNotes"
 import Search from "./modules/Search"
 import MobileMenu from "./modules/MobileMenu"
@@ -15,3 +16,4 @@ const heroSlider = new HeroSlider()
 const googleMap = new GoogleMap()
 const leafletMap = new LeafletMap()
 const myNotes = new MyNotes()
+const like = new Like()
