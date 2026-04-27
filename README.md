@@ -3,7 +3,7 @@ This is a project from the Udemi course by the name of Become a Wordpress Develo
 
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-Also download mu-plugins (Must use plugins folder) repo for this project
+Also download mu-plugins (Must use plugins folder) and custom-plugin repos for this project
 
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
