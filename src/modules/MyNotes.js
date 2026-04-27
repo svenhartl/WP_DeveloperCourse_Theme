@@ -84,7 +84,7 @@ class MyNotes {
       setTimeout(function () {
         thisNote.remove()
       }, 401)
-      if (response.data.userNoteCount < 5) {
+      if (response.data.userNoteCount < 50) {
         document.querySelector(".note-limit-message").classList.remove("active")
       }
     } catch (e) {

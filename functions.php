@@ -1,5 +1,75 @@
 <?php
 require get_theme_file_path('/inc/like-route.php');
+
+function university_make_homepage_slideshow_queryable($args, $post_type) {
+  if ('homepage-slideshow' !== $post_type) {
+    return $args;
+  }
+
+  $args['public'] = true;
+  $args['publicly_queryable'] = true;
+  $args['exclude_from_search'] = true;
+  $args['show_ui'] = true;
+  $args['show_in_rest'] = true;
+  $args['has_archive'] = false;
+  $args['rewrite'] = array(
+    'slug' => 'homepage-slides',
+    'with_front' => false
+  );
+  $args['supports'] = array('title', 'editor', 'excerpt');
+
+  return $args;
+}
+
+add_filter('register_post_type_args', 'university_make_homepage_slideshow_queryable', 10, 2);
+
+function university_flush_homepage_slideshow_rewrites_once() {
+  $rewriteVersion = '20260427';
+
+  if (get_option('university_homepage_slideshow_rewrite_version') === $rewriteVersion) {
+    return;
+  }
+
+  flush_rewrite_rules(false);
+  update_option('university_homepage_slideshow_rewrite_version', $rewriteVersion);
+}
+
+add_action('init', 'university_flush_homepage_slideshow_rewrites_once', 20);
+
+function university_get_slideshow_image_url($post_id = false) {
+  $slideImage = get_field('slide_image', $post_id);
+
+  if (is_array($slideImage)) {
+    if (!empty($slideImage['sizes']['slideshowImage'])) {
+      return $slideImage['sizes']['slideshowImage'];
+    }
+
+    if (!empty($slideImage['url'])) {
+      return $slideImage['url'];
+    }
+  }
+
+  if (is_numeric($slideImage)) {
+    $imageUrl = wp_get_attachment_image_url((int) $slideImage, 'slideshowImage');
+
+    return $imageUrl ? $imageUrl : '';
+  }
+
+  return is_string($slideImage) ? $slideImage : '';
+}
+
+function university_get_slideshow_title($post_id = false) {
+  $slideTitle = get_field('slide_title', $post_id);
+
+  return $slideTitle ? $slideTitle : get_the_title($post_id);
+}
+
+function university_get_slideshow_link_text($post_id = false) {
+  $linkText = get_field('slide_link_text', $post_id);
+
+  return $linkText ? $linkText : 'Learn More';
+}
+
 if (!function_exists('university_resolve_field_post_id')) {
   function university_resolve_field_post_id($post_id = false) {
     if ($post_id instanceof WP_Post) {
@@ -132,9 +202,14 @@ add_action('wp_enqueue_scripts', 'university_files');
 function university_features() {
   add_theme_support('title-tag');
   add_theme_support('post-thumbnails');
+
+  // Custom image sizes //
+
   add_image_size('professorLandscape', 400, 260, true);
   add_image_size('professorPortrait', 480, 650, true);
   add_image_size('pageBanner', 1500, 350, true);
+  add_image_size('slideshowImage', 1900, 525, true);
+
 }
 
 add_action('after_setup_theme', 'university_features');
@@ -747,6 +822,9 @@ register_rest_field('note','userNoteCount',array(
 'get_callback' => function(){return count_user_posts(get_current_user_id(),'note');}
 ));
 }
+
+
+
 
 // ne radi djubre (google zidovi)
 
